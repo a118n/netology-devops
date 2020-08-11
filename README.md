@@ -1,2 +1,2 @@
 # netology-devops
-Homework for DevOps course from Netology
+Homework for DevOps course from Netology.
