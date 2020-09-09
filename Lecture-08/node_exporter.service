@@ -1,0 +1,14 @@
+[Unit]
+Description=Prometheus Node Exporter
+After=syslog.target network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=node_exporter
+ExecStart=/usr/local/bin/node_exporter $EXTRA_OPTS
+
+[Install]
+WantedBy=multi-user.target

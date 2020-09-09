@@ -1,0 +1,95 @@
+На лекции мы познакомились с node_exporter. В демонстрации его исполняемый файл запускался в background. Этого достаточно для демо, но не для настоящей production-системы, где процессы должны находиться под внешним управлением. Используя знания из лекции по systemd, создайте самостоятельно простой unit-файл для node_exporter:
+поместите его в автозагрузку,
+предусмотрите возможность добавления опций к запускаемому процессу через внешний файл (посмотрите, например, на systemctl cat cron),
+удостоверьтесь, что с помощью systemctl процесс корректно стартует, завершается, а после перезагрузки автоматически поднимается.
+
+Качаем бинарник и копируем в нужную директорию:
+curl -LO https://github.com/prometheus/node_exporter/releases/download/v1.0.1/node_exporter-1.0.1.linux-amd64.tar.gz
+tar xvzf node_exporter-1.0.1.linux-amd64.tar.gz
+cd node_exporter-1.0.1.linux-amd64
+chmod +x node_exporter
+sudo cp node_exporter /usr/local/bin/
+
+Решил создать для него отдельного пользователя:
+sudo useradd --no-create-home --shell /bin/false node_exporter
+sudo chown node_exporter:node_exporter /usr/local/bin/node_exporter
+
+Делаем systemd юнит-файл:
+sudoedit /etc/systemd/system/node_exporter.service
+
+Запускаем:
+sudo systemctl daemon-reload
+sudo systemctl enable --now node_exporter
+
+
+
+Ознакомьтесь с опциями node_exporter и выводом /metrics по-умолчанию. Приведите несколько опций, которые вы бы выбрали для базового мониторинга хоста по CPU, памяти, диску и сети.
+
+--collector.cpu
+--collector.cpufreq
+--collector.diskstats
+--collector.filesystem
+--collector.meminfo
+--collector.pressure
+--collector.netclass
+--collector.netdev
+--collector.netstat
+
+
+
+Можно ли по выводу dmesg понять, осознает ли ОС, что загружена не на настоящем оборудовании, а на системе виртуализации?
+
+[root@ansible ~]# dmesg -T | grep virt
+[Mon Sep  7 16:29:34 2020] systemd[1]: Detected virtualization vmware.
+
+Или VBox:
+[Wed Sep  9 07:53:04 2020] systemd[1]: Detected virtualization oracle.
+
+
+
+Как настроен sysctl fs.nr_open на системе по-умолчанию? Узнайте, что означает этот параметр. Какой другой существующий лимит не позволит достичь такого числа (ulimit --help)?
+
+Ubuntu\CentOS:
+fs.nr_open = 1048576
+
+Arch:
+fs.nr_open = 1073741816
+
+Максимальное количество файл-хэндлеров, которое доступно процессу:
+"This denotes the maximum number of file-handles a process can
+allocate. Default value is 1024*1024 (1048576) which should be
+enough for most machines. Actual limit depends on RLIMIT_NOFILE
+resource limit."
+
+По идее ulimit -n (max open files) не даст. По дефолту 1024.
+
+
+
+Запустите любой долгоживущий процесс (не ls, который отработает мгновенно, а, например, sleep 1h) в отдельном неймспейсе процессов; покажите, что ваш процесс работает под PID 1 через nsenter. Для простоты работайте в данном задании под root (sudo -i). Под обычным пользователем требуются дополнительные опции (--map-root-user) и т.д.
+
+Продемонстрировано на скриншоте nsenter.png
+
+
+
+Найдите информацию о том, что такое :(){ :|:& };:. Запустите эту команду в своей виртуальной машине Vagrant с Ubuntu 20.04 (это важно,
+поведение в других ОС не проверялось). Некоторое время все будет "плохо", после чего (минуты) – ОС должна стабилизироваться. Вызов dmesg расскажет, какой механизм помог автоматической стабилизации. Как настроен этот механизм по-умолчанию, и как изменить число процессов, которое можно создать в сессии?
+
+Классический fork-bomb?)
+
+В dmesg вывело:
+cgroup: fork rejected by pids controller in /user.slice/user-1000.slice/session-8.scope
+Тоесть механизм ядра cgroups, к которому обращается systemd.
+
+Можно поменять в /etc/systemd/logind.conf:
+UserTasksMax=Infinity - убрать полностью лимит
+UserTasksMax=16000 - выставить к примеру 16000.
+
+По-умолчанию стоит значение 33%.
+
+Еще на уровне PAM число процессов можно поменять в /etc/security/limits.conf, дописав в конец файла:
+
+*    hard     nproc     500
+root hard     nproc     500
+
+Чтобы для всех на уровне ядра ограничить число процессов до 500 к примеру.
+Насколько я понял если сделаем sudo ulimit -u 800, это спасет в текущей сессии до ребута, но если бомбу запустить с sudo, то не спасет.
