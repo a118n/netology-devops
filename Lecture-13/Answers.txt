@@ -1,0 +1,97 @@
+Имеем:
+netology1 192.168.1.10 - vault server
+netology2 192.168.1.20 - nginx server
+netology6 192.168.1.60 - client node (простой ubuntu desktop 20.04)
+
+Установите Hashicorp Vault в виртуальной машине Vagrant/VirtualBox. Это не является обязательным для выполнения задания, но для лучшего понимания что происходит при выполнении команд (посмотреть результат в UI), можно по аналогии с netdata из прошлых лекций пробросить порт Vault на localhost:
+config.vm.network "forwarded_port", guest: 8200, host: 8200
+Однако, обратите внимание, что только-лишь проброса порта не будет достаточно – по-умолчанию Vault слушает на 127.0.0.1; добавьте к опциям запуска -dev-listen-address="0.0.0.0:8200".
+
+curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
+sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+sudo apt-get update && sudo apt-get install -y vault consul jq
+
+
+
+Запустить Vault-сервер в dev-режиме (дополнив ключ -dev упомянутым выше -dev-listen-address, если хотите увидеть UI).
+
+vault server -dev -dev-listen-address="0.0.0.0:8200"
+echo -n 'tGcx/517JpbsEiBGIji2n5DOKwE3sf+L4GAriMrtoCc=' > unseal
+echo -n 's.tDTtX8igglfojTdAe5YJsRX5' > root_token
+export VAULT_ADDR='http://0.0.0.0:8200'
+vault status
+scp root_token dallen@192.168.1.60:/home/dallen (для логина через веб-браузер)
+
+
+
+Используя PKI Secrets Engine, создайте Root CA и Intermediate CA. Обратите внимание на дополнительные материалы по созданию CA в Vault, если с изначальной инструкцией возникнут сложности.
+
+1. Делаем Root CA:
+vault secrets enable pki
+vault secrets tune -max-lease-ttl=87600h pki
+vault write -field=certificate pki/root/generate/internal common_name="example.com" ttl=87600h > CA_cert.crt
+vault write pki/config/urls issuing_certificates="http://127.0.0.1:8200/v1/pki/ca" crl_distribution_points="http://127.0.0.1:8200/v1/pki/crl"
+
+2. Делаем Intermediate CA:
+vault secrets enable -path=pki_int pki
+vault secrets tune -max-lease-ttl=43800h pki_int
+vault write -format=json pki_int/intermediate/generate/internal common_name="example.com Intermediate Authority" | jq -r '.data.csr' > pki_intermediate.csr
+vault write -format=json pki/root/sign-intermediate csr=@pki_intermediate.csr format=pem_bundle ttl="43800h" | jq -r '.data.certificate' > intermediate.cert.pem
+vault write pki_int/intermediate/set-signed certificate=@intermediate.cert.pem
+
+
+
+Согласно этой же инструкции, подпишите Intermediate CA csr на сертификат для тестового домена (например, netology.example.com если действовали согласно инструкции).
+
+1. Создаем роль example.com:
+vault write pki_int/roles/example-dot-com allowed_domains="example.com" allow_subdomains=true max_ttl="720h"
+
+2. Выпускаем сертификат:
+vault write --format=json pki_int/issue/example-dot-com common_name="netology.example.com" ttl="8760h" > netology.example.com.json
+
+3. Вытаскиваем частный ключ и сертификат с цепочкой:
+cat netology.example.com.json | jq -r '.data.private_key' > netology.example.com.pem
+cat netology.example.com.json | jq -r '.data.certificate' > netology.example.com.crt
+cat netology.example.com.json | jq -r '.data.ca_chain[]' >> netology.example.com.crt
+rm netology.example.com.json
+
+
+
+Поднимите на localhost nginx, сконфигурируйте default vhost для использования подписанного Vault Intermediate CA сертификата и выбранного вами домена. Сертификат из Vault подложить в nginx руками.
+Модифицировав /etc/hosts и системный trust-store, добейтесь безошибочной с точки зрения HTTPS работы curl на ваш тестовый домен (отдающийся с localhost). Рекомендуется добавлять в доверенные сертификаты Intermediate CA. Root CA добавить было бы правильнее, но тогда при конфигурации nginx потребуется включить в цепочку Intermediate, что выходит за рамки лекции. Так же, пожалуйста, не добавляйте в доверенные сам сертификат хоста.
+
+1. Копируем с сервера vault сгенерированный сертификат и ключ:
+scp CA_cert.crt vagrant@192.168.1.20:/home/vagrant
+scp netology.example.com.* vagrant@192.168.1.20:/home/vagrant
+
+2. На сервере с nginx перенесем их из папки пользователя:
+sudo mv netology.example.com.* /etc/ssl/
+sudo mv CA_cert.crt /usr/local/share/ca-certificates/
+sudo update-ca-certificates
+
+3. Пропишем netology.example.com в /etc/hosts:
+echo 127.0.0.1 netology.example.com >> /etc/hosts
+
+4. Включаем ssl и укарываем путь к сертификату в конфиге nginx:
+sudoedit /etc/nginx/sites-enabled/default
+sudo nginx -t
+sudo systemctl restart nginx
+sudo systemctl status nginx
+
+4. Проверяем, что SSL заработал:
+curl -I https://netology.example.com
+
+HTTP/1.1 200 OK
+Server: nginx/1.18.0 (Ubuntu)
+Date: Sun, 27 Sep 2020 12:33:32 GMT
+Content-Type: text/html
+Content-Length: 612
+Last-Modified: Sun, 27 Sep 2020 11:05:30 GMT
+Connection: keep-alive
+ETag: "5f7071fa-264"
+Accept-Ranges: bytes
+
+5. На клиенте также добавим корневой CA и пропишем хост, чтобы из браузера тоже заработало:
+echo 192.168.1.20 netology.example.com >> /etc/hosts
+sudo mv CA_cert.crt /usr/local/share/ca-certificates/
+sudo update-ca-certificates
