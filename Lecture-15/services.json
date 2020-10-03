@@ -1,0 +1,16 @@
+{
+    "services": [
+        {
+            "hostname": "drive.google.com",
+            "ip": "64.233.165.194"
+        },
+        {
+            "hostname": "mail.google.com",
+            "ip": "64.233.164.18"
+        },
+        {
+            "hostname": "google.com",
+            "ip": "74.125.205.101"
+        }
+    ]
+}
