@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from os import popen, getcwd
+from os import popen, getcwd, path
 from sys import argv
 from subprocess import run
 
@@ -19,7 +19,7 @@ def check_modified(path):
 
 path = argv[1] if len(argv) >= 2 else getcwd()
 
-if is_git_repo(path):
+if path.isdir(path) and is_git_repo(path):
     check_modified(path)
 else:
-    print(f'{path} is not a git repo!')
+    print(f"{path} is not a git repo, or directory doesn't exist!")
