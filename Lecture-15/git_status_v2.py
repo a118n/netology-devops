@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from os import popen, getcwd, path
-from sys import argv, exit
+from sys import argv
 from subprocess import run
 
 
