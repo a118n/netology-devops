@@ -19,7 +19,7 @@ def check_modified(repo_path):
 
 repo_path = argv[1] if len(argv) >= 2 else getcwd()
 
-if not path.isdir(repo_path) or not is_git_repo(repo_path):
-    print(f"{repo_path} is not a git repo or directory doesn't exist!")
-else:
+if path.isdir(repo_path) and is_git_repo(repo_path):
     check_modified(repo_path)
+else:
+    print(f"{repo_path} is not a git repo or directory doesn't exist!")
