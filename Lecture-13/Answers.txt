@@ -1,97 +1,55 @@
-Имеем:
-netology1 192.168.1.10 - vault server
-netology2 192.168.1.20 - nginx server
-netology6 192.168.1.60 - client node (простой ubuntu desktop 20.04)
+ipvs. Если при запросе на VIP сделать подряд несколько запросов (например, for i in {1..50}; do curl -I -s 172.28.128.200>/dev/null; done ), ответы будут получены почти мгновенно. Тем не менее, в выводе ipvsadm -Ln еще некоторое время будут висеть активные InActConn. Почему так происходит?
 
-Установите Hashicorp Vault в виртуальной машине Vagrant/VirtualBox. Это не является обязательным для выполнения задания, но для лучшего понимания что происходит при выполнении команд (посмотреть результат в UI), можно по аналогии с netdata из прошлых лекций пробросить порт Vault на localhost:
-config.vm.network "forwarded_port", guest: 8200, host: 8200
-Однако, обратите внимание, что только-лишь проброса порта не будет достаточно – по-умолчанию Vault слушает на 127.0.0.1; добавьте к опциям запуска -dev-listen-address="0.0.0.0:8200".
-
-curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
-sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
-sudo apt-get update && sudo apt-get install -y vault consul jq
+curl использует TCP, а как мы знаем tcp-сессии окончательно закрываются после таймаута. Скорее всего, это именно эти сессии, в которых инициатор еще висит в состоянии TIME WAIT.
 
 
 
-Запустить Vault-сервер в dev-режиме (дополнив ключ -dev упомянутым выше -dev-listen-address, если хотите увидеть UI).
+На лекции мы познакомились отдельно с ipvs и отдельно с keepalived. Воспользовавшись этими знаниями, совместите технологии вместе (VIP должен подниматься демоном keepalived). Приложите конфигурационные файлы, которые у вас получились, и продемонстрируйте работу получившейся конструкции. Используйте для директора отдельный хост, не совмещая его с риалом! Подобная схема возможна, но выходит за рамки рассмотренного на лекции.
 
-vault server -dev -dev-listen-address="0.0.0.0:8200"
-echo -n 'tGcx/517JpbsEiBGIji2n5DOKwE3sf+L4GAriMrtoCc=' > unseal
-echo -n 's.tDTtX8igglfojTdAe5YJsRX5' > root_token
-export VAULT_ADDR='http://0.0.0.0:8200'
-vault status
-scp root_token dallen@192.168.1.60:/home/dallen (для логина через веб-браузер)
+Итак, имеем 5 хостов:
+192.168.1.10 - ipvs/keepalived
+192.168.1.20 - ipvs/keepalived
+192.168.1.30 - nginx
+192.168.1.40 - nginx
+192.168.1.50 - test node, не участвует в балансировке
+
+1. Настраиваем балансировщики:
+sudo apt-get install -y keepalived ipvsadm
+Настраиваем ipvs:
+sudoedit /etc/default/ipvsadm (конфиг прилагаю)
+sudo ipvsadm -A -t 192.168.1.200:80 -s rr
+sudo ipvsadm -a -t 192.168.1.200:80 -r 192.168.1.30:80 -m
+sudo ipvsadm -a -t 192.168.1.200:80 -r 192.168.1.40:80 -m
+sudo ipvsadm -Ln --stats (убеждаемся что все верно добавилось)
+sudo ipvsadm -S | sudo tee /etc/ipvsadm.rules
+Далее настроим keepalived:
+sudoedit /etc/keepalived/keepalived.conf (на втором хосте делаем приоритет поменьше, например 90. в остальном конфиг идентичный)
+sudo systemctl restart keepalived && systemctl status keepalived (проверяем, что на первом хосте keepalived встал в master, на втором в backup)
+ip -4 a s eth1 (проверяем, что адрес забиндился на нужный нам интерфейс)
+На этом настройка балансировщиков в принципе завершена, ребутаем оба хоста, чтобы проверить что все корректно поднимается после перезагрузки.
+
+2. Настраиваем nginx-ноды:
+sudo apt-get install -y nginx
+sudo systemctl enable --now nginx && systemctl status nginx
+sudoedit /etc/netplan/01-netcfg.yaml (добавляем адрес 192.168.1.200/32)
+sudo netplan apply
+ip -4 a s eth1 (проверяем что адрес добавился)
+
+Проверяем с 5 хоста, что nginx работает:
+curl -I -s 192.168.1.30
+curl -I -s 192.168.1.40
+
+3. Проверяем, что работает балансировщик:
+for i in {1..50}; do curl -I -s 192.168.1.200>/dev/null; done (делаем 50 запросов, c 5 хоста)
+sudo ipvsadm -Ln --stats (на балансировщике)
+wc -l /var/log/nginx/access.log (на серверах с nginx)
+
+А теперь выключим интерфейс на netology1 и проверим keepalived:
+sudo ip link set eth1 down
+Адрес перебрасывается на netology2 и балансировщик продолжает работать.
 
 
 
-Используя PKI Secrets Engine, создайте Root CA и Intermediate CA. Обратите внимание на дополнительные материалы по созданию CA в Vault, если с изначальной инструкцией возникнут сложности.
+В лекции мы использовали только 1 VIP адрес для балансировки. У такого подхода несколько отрицательных моментов, один из которых – невозможность активного использования нескольких хостов (1 адрес может только переехать с master на standby). Подумайте, сколько адресов оптимально использовать, если мы хотим без какой-либо деградации выдерживать потерю 1 из 3 хостов при входящем трафике 1.5 Гбит/с и физических линках хостов в 1 Гбит/с? Предполагается, что мы хотим задействовать 3 балансировщика в активном режиме (то есть не 2 адреса на 3 хоста, один из которых в обычное время простаивает).
 
-1. Делаем Root CA:
-vault secrets enable pki
-vault secrets tune -max-lease-ttl=87600h pki
-vault write -field=certificate pki/root/generate/internal common_name="example.com" ttl=87600h > CA_cert.crt
-vault write pki/config/urls issuing_certificates="http://127.0.0.1:8200/v1/pki/ca" crl_distribution_points="http://127.0.0.1:8200/v1/pki/crl"
-
-2. Делаем Intermediate CA:
-vault secrets enable -path=pki_int pki
-vault secrets tune -max-lease-ttl=43800h pki_int
-vault write -format=json pki_int/intermediate/generate/internal common_name="example.com Intermediate Authority" | jq -r '.data.csr' > pki_intermediate.csr
-vault write -format=json pki/root/sign-intermediate csr=@pki_intermediate.csr format=pem_bundle ttl="43800h" | jq -r '.data.certificate' > intermediate.cert.pem
-vault write pki_int/intermediate/set-signed certificate=@intermediate.cert.pem
-
-
-
-Согласно этой же инструкции, подпишите Intermediate CA csr на сертификат для тестового домена (например, netology.example.com если действовали согласно инструкции).
-
-1. Создаем роль example.com:
-vault write pki_int/roles/example-dot-com allowed_domains="example.com" allow_subdomains=true max_ttl="720h"
-
-2. Выпускаем сертификат:
-vault write --format=json pki_int/issue/example-dot-com common_name="netology.example.com" ttl="8760h" > netology.example.com.json
-
-3. Вытаскиваем частный ключ и сертификат с цепочкой:
-cat netology.example.com.json | jq -r '.data.private_key' > netology.example.com.pem
-cat netology.example.com.json | jq -r '.data.certificate' > netology.example.com.crt
-cat netology.example.com.json | jq -r '.data.ca_chain[]' >> netology.example.com.crt
-rm netology.example.com.json
-
-
-
-Поднимите на localhost nginx, сконфигурируйте default vhost для использования подписанного Vault Intermediate CA сертификата и выбранного вами домена. Сертификат из Vault подложить в nginx руками.
-Модифицировав /etc/hosts и системный trust-store, добейтесь безошибочной с точки зрения HTTPS работы curl на ваш тестовый домен (отдающийся с localhost). Рекомендуется добавлять в доверенные сертификаты Intermediate CA. Root CA добавить было бы правильнее, но тогда при конфигурации nginx потребуется включить в цепочку Intermediate, что выходит за рамки лекции. Так же, пожалуйста, не добавляйте в доверенные сам сертификат хоста.
-
-1. Копируем с сервера vault сгенерированный сертификат и ключ:
-scp CA_cert.crt vagrant@192.168.1.20:/home/vagrant
-scp netology.example.com.* vagrant@192.168.1.20:/home/vagrant
-
-2. На сервере с nginx перенесем их из папки пользователя:
-sudo mv netology.example.com.* /etc/ssl/
-sudo mv CA_cert.crt /usr/local/share/ca-certificates/
-sudo update-ca-certificates
-
-3. Пропишем netology.example.com в /etc/hosts:
-echo 127.0.0.1 netology.example.com >> /etc/hosts
-
-4. Включаем ssl и укарываем путь к сертификату в конфиге nginx:
-sudoedit /etc/nginx/sites-enabled/default
-sudo nginx -t
-sudo systemctl restart nginx
-sudo systemctl status nginx
-
-4. Проверяем, что SSL заработал:
-curl -I https://netology.example.com
-
-HTTP/1.1 200 OK
-Server: nginx/1.18.0 (Ubuntu)
-Date: Sun, 27 Sep 2020 12:33:32 GMT
-Content-Type: text/html
-Content-Length: 612
-Last-Modified: Sun, 27 Sep 2020 11:05:30 GMT
-Connection: keep-alive
-ETag: "5f7071fa-264"
-Accept-Ranges: bytes
-
-5. На клиенте также добавим корневой CA и пропишем хост, чтобы из браузера тоже заработало:
-echo 192.168.1.20 netology.example.com >> /etc/hosts
-sudo mv CA_cert.crt /usr/local/share/ca-certificates/
-sudo update-ca-certificates
+Для более точечного размазывания трафика при выпадении одного хоста можно использовать шесть IP адресов в All-Active конфигурации и DNS round-robin. Тогда при выпадении хоста трафик будет равномерно распределен на оставшиеся два по 0.75 гбит\с.

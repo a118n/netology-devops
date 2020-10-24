@@ -1,52 +1,97 @@
-Есть скрипт:
-a=1
-b=2
-c=a+b
-d=$a+$b
-e=$(($a+$b))
-Какие значения переменным c,d,e будут присвоены?
-Почему?
+Имеем:
+netology1 192.168.1.10 - vault server
+netology2 192.168.1.20 - nginx server
+netology6 192.168.1.60 - client node (простой ubuntu desktop 20.04)
 
-c: a+b, т.к. мы по сути передаем просто строку a+b, без знака переменных
-d: 1+2, передаем уже переменные, но без экранирования баш будет все равно считать это как строку
-e: 3, здесь уже есть скобки, значит произойдет арифметическая операция с указанными перемеными
+Установите Hashicorp Vault в виртуальной машине Vagrant/VirtualBox. Это не является обязательным для выполнения задания, но для лучшего понимания что происходит при выполнении команд (посмотреть результат в UI), можно по аналогии с netdata из прошлых лекций пробросить порт Vault на localhost:
+config.vm.network "forwarded_port", guest: 8200, host: 8200
+Однако, обратите внимание, что только-лишь проброса порта не будет достаточно – по-умолчанию Vault слушает на 127.0.0.1; добавьте к опциям запуска -dev-listen-address="0.0.0.0:8200".
 
-
-
-На нашем локальном сервере упал сервис и мы написали скрипт, который постоянно проверяет его доступность, записывая дату проверок до тех пор, пока сервис не станет доступным. В скрипте допущена ошибка, из-за которой выполнение не может завершиться, при этом место на Жёстком Диске постоянно уменьшается. Что необходимо сделать, чтобы его исправить:
-
-while ((1==1)
-do
-curl https://localhost:4757
-if (($? != 0))
-then
-date >> curl.log
-fi
-done
-
-1. Нету shebang
-2. На первой строке в проверке условия пропущена скобка в конце
-3. Нету break для выхода их бесконечного цикла (когда статус станет 0, т.е. curl успешно достучится до хоста).
-Поправил в test-localhost.sh.
+curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
+sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+sudo apt-get update && sudo apt-get install -y vault consul jq
 
 
 
-Необходимо написать скрипт, который проверяет доступность трёх IP: 192.168.0.1, 173.194.222.113, 87.250.250.242 по 80 порту и записывает результат в файл log. Проверять доступность необходимо пять раз для каждого узла.
+Запустить Vault-сервер в dev-режиме (дополнив ключ -dev упомянутым выше -dev-listen-address, если хотите увидеть UI).
 
-Скрипт test-hosts-v1.sh
-
-
-
-Необходимо дописать скрипт из предыдущего задания так, чтобы он выполнялся до тех пор, пока один из узлов не окажется недоступным. Если любой из узлов недоступен - IP этого узла пишется в файл error, скрипт прерывается
-
-Скрипт test-hosts-v2.sh
-
+vault server -dev -dev-listen-address="0.0.0.0:8200"
+echo -n 'tGcx/517JpbsEiBGIji2n5DOKwE3sf+L4GAriMrtoCc=' > unseal
+echo -n 's.tDTtX8igglfojTdAe5YJsRX5' > root_token
+export VAULT_ADDR='http://0.0.0.0:8200'
+vault status
+scp root_token dallen@192.168.1.60:/home/dallen (для логина через веб-браузер)
 
 
-Мы хотим, чтобы у нас были красивые сообщения для коммитов в репозиторий. Для этого нужно написать локальный хук для git, который будет проверять, что сообщение в коммите содержит код текущего задания в квадратных скобках и количество символов в сообщении не превышает 30. Пример сообщения: [04-script-01-bash] сломал хук
 
-Создаем хук:
-vim .git/hooks/commit-msg
+Используя PKI Secrets Engine, создайте Root CA и Intermediate CA. Обратите внимание на дополнительные материалы по созданию CA в Vault, если с изначальной инструкцией возникнут сложности.
 
-Делаем его исполняемым:
-chmod +x .git/hooks/commit-msg
+1. Делаем Root CA:
+vault secrets enable pki
+vault secrets tune -max-lease-ttl=87600h pki
+vault write -field=certificate pki/root/generate/internal common_name="example.com" ttl=87600h > CA_cert.crt
+vault write pki/config/urls issuing_certificates="http://127.0.0.1:8200/v1/pki/ca" crl_distribution_points="http://127.0.0.1:8200/v1/pki/crl"
+
+2. Делаем Intermediate CA:
+vault secrets enable -path=pki_int pki
+vault secrets tune -max-lease-ttl=43800h pki_int
+vault write -format=json pki_int/intermediate/generate/internal common_name="example.com Intermediate Authority" | jq -r '.data.csr' > pki_intermediate.csr
+vault write -format=json pki/root/sign-intermediate csr=@pki_intermediate.csr format=pem_bundle ttl="43800h" | jq -r '.data.certificate' > intermediate.cert.pem
+vault write pki_int/intermediate/set-signed certificate=@intermediate.cert.pem
+
+
+
+Согласно этой же инструкции, подпишите Intermediate CA csr на сертификат для тестового домена (например, netology.example.com если действовали согласно инструкции).
+
+1. Создаем роль example.com:
+vault write pki_int/roles/example-dot-com allowed_domains="example.com" allow_subdomains=true max_ttl="720h"
+
+2. Выпускаем сертификат:
+vault write --format=json pki_int/issue/example-dot-com common_name="netology.example.com" ttl="8760h" > netology.example.com.json
+
+3. Вытаскиваем частный ключ и сертификат с цепочкой:
+cat netology.example.com.json | jq -r '.data.private_key' > netology.example.com.pem
+cat netology.example.com.json | jq -r '.data.certificate' > netology.example.com.crt
+cat netology.example.com.json | jq -r '.data.ca_chain[]' >> netology.example.com.crt
+rm netology.example.com.json
+
+
+
+Поднимите на localhost nginx, сконфигурируйте default vhost для использования подписанного Vault Intermediate CA сертификата и выбранного вами домена. Сертификат из Vault подложить в nginx руками.
+Модифицировав /etc/hosts и системный trust-store, добейтесь безошибочной с точки зрения HTTPS работы curl на ваш тестовый домен (отдающийся с localhost). Рекомендуется добавлять в доверенные сертификаты Intermediate CA. Root CA добавить было бы правильнее, но тогда при конфигурации nginx потребуется включить в цепочку Intermediate, что выходит за рамки лекции. Так же, пожалуйста, не добавляйте в доверенные сам сертификат хоста.
+
+1. Копируем с сервера vault сгенерированный сертификат и ключ:
+scp CA_cert.crt vagrant@192.168.1.20:/home/vagrant
+scp netology.example.com.* vagrant@192.168.1.20:/home/vagrant
+
+2. На сервере с nginx перенесем их из папки пользователя:
+sudo mv netology.example.com.* /etc/ssl/
+sudo mv CA_cert.crt /usr/local/share/ca-certificates/
+sudo update-ca-certificates
+
+3. Пропишем netology.example.com в /etc/hosts:
+echo 127.0.0.1 netology.example.com >> /etc/hosts
+
+4. Включаем ssl и укарываем путь к сертификату в конфиге nginx:
+sudoedit /etc/nginx/sites-enabled/default
+sudo nginx -t
+sudo systemctl restart nginx
+sudo systemctl status nginx
+
+4. Проверяем, что SSL заработал:
+curl -I https://netology.example.com
+
+HTTP/1.1 200 OK
+Server: nginx/1.18.0 (Ubuntu)
+Date: Sun, 27 Sep 2020 12:33:32 GMT
+Content-Type: text/html
+Content-Length: 612
+Last-Modified: Sun, 27 Sep 2020 11:05:30 GMT
+Connection: keep-alive
+ETag: "5f7071fa-264"
+Accept-Ranges: bytes
+
+5. На клиенте также добавим корневой CA и пропишем хост, чтобы из браузера тоже заработало:
+echo 192.168.1.20 netology.example.com >> /etc/hosts
+sudo mv CA_cert.crt /usr/local/share/ca-certificates/
+sudo update-ca-certificates
