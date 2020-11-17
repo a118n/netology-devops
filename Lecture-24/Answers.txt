@@ -9,7 +9,7 @@
 В следующих заданиях мы будем продолжать работу с данным контейнером.
 
 
-docker run --name mysql -e MYSQL_ROOT_PASSWORD=123 -d mysql:8
+docker run --name mysql -v mysql-db:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=123 -d mysql:8
 docker exec -it mysql bash
 apt update && apt install -y curl
 cd /tmp
