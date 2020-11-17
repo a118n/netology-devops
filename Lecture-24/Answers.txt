@@ -1,0 +1,89 @@
+Задача 1
+Используя docker поднимите инстанс MySQL (версию 8). Данные БД сохраните в volume.
+Изучите бэкап БД и восстановитесь из него.
+Перейдите в управляющую консоль mysql внутри контейнера.
+Используя команду \h получите список управляющих команд.
+Найдите команду для выдачи статуса БД и приведите в ответе из ее вывода версию сервера БД.
+Подключитесь к восстановленной БД и получите список таблиц из этой БД.
+Приведите в ответе количество записей с price > 300.
+В следующих заданиях мы будем продолжать работу с данным контейнером.
+
+
+docker run --name mysql -e MYSQL_ROOT_PASSWORD=123 -d mysql:8
+docker exec -it mysql bash
+apt update && apt install -y curl
+cd /tmp
+curl -LO https://raw.githubusercontent.com/netology-code/virt-homeworks/master/06-db-03-mysql/test_data/test_dump.sql
+mysql -p
+mysql> create database test_db;
+mysql> use test_db;
+mysql> source test_dump.sql
+\s
+show tables;
+select * from orders where price > 300;
+
+
+
+Задача 2
+Создайте пользователя test в БД c паролем test-pass, используя:
+плагин авторизации mysql_native_password
+срок истечения пароля - 180 дней
+количество попыток авторизации - 3
+максимальное количество запросов в час - 100
+аттрибуты пользователя:
+Фамилия "Pretty"
+Имя "James"
+Предоставьте привелегии пользователю test на операции SELECT базы test_db.
+Используя таблицу INFORMATION_SCHEMA.USER_ATTRIBUTES получите данные по пользователю test и приведите в ответе к задаче.
+
+
+create user test identified with mysql_native_password by 'test-pass' with max_connections_per_hour 100 password expire interval 180 day failed_login_attempts 3 attribute '{"fname": "James", "lname": "Pretty"}';
+grant select on test_db.* to test;
+select * from INFORMATION_SCHEMA.USER_ATTRIBUTES where user='test';
+
+
+
+Задача 3
+Установите профилирование SET profiling = 1. Изучите вывод профилирования команд SHOW PROFILES;.
+Исследуйте, какой engine используется в таблице БД test_db и приведите в ответе.
+Измените engine и приведите время выполнения и запрос на изменения из профайлера в ответе:
+на MyISAM
+на InnoDB
+
+
+set profiling=1;
+select * from orders;
+show profiles;
+show table status where name = 'test_db';
+alter table orders engine = MyISAM;
+select * from orders;
+show profiles;
+
+InnoDB: 0.00025900
+MyISAM: 0.00022600
+
+
+
+Задача 4
+Изучите файл my.cnf в директории /etc/mysql.
+Измените его согласно ТЗ (движок InnoDB):
+Скорость IO важнее сохранности данных
+Нужна компрессия таблиц для экономии места на диске
+Размер буффера с незакомиченными транзакциями 1 Мб
+Буффер кеширования 30% от ОЗУ
+Размер файла логов операций 100 Мб
+Приведите в ответе измененный файл my.cnf.
+
+
+docker stats показывает, что дефолтный лимит ОЗУ для контейнера MySQL на моей машине 12.42GiB. Соответственно 30% будем считать от этого числа.
+
+vim /etc/mysql/conf.d/10-custom.cnf
+
+[mysql]
+innodb_flush_method = O_DSYNC
+innodb_flush_log_at_trx_commit = 2
+query_cache_size = 0
+innodb-file-per-table = ON
+innodb_log_buffer_size = 1M
+innodb_buffer_pool_size = 3726M
+innodb_log_file_size = 100M
