@@ -19,9 +19,9 @@ db.killOp(<opId>)
 Redis блокирует операции записи
 Как вы думаете, в чем может быть проблема?
 
-Видимо вся память забилась истекшими ключами, но еще не удаленными. Редис заблокировался, чтобы вывести из БД удаленные ключи и снизить их количество менее 25%. С ссылки:
+Видимо вся память забилась истекшими ключами, но еще не удаленными. Redis заблокировался, чтобы вывести из БД удаленные ключи и снизить их количество менее 25%. С ссылки:
 if the database has many many keys expiring in the same second, and these make up at least 25% of the current population of keys with an expire set, Redis can block in order to get the percentage of keys already expired below 25%.
-
+Т.к. Redis - однопоточное приложение, то все операции блокируются, пока он не выполнит очистку.
 
 
 Задача 3
