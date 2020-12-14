@@ -3,6 +3,31 @@ provider "aws" {
   region  = "eu-central-1"
 }
 
+terraform {
+  backend "s3" {
+    bucket         = "netology-terraform"
+    key            = "tf-infra/terraform.tfstate"
+    region         = "eu-central-1"
+    encrypt        = true
+    dynamodb_table = "terraform_locks"
+  }
+}
+
+locals {
+  test_instance_type = {
+    stage = "t2.micro"
+    prod  = "t2.nano"
+  }
+  test_instance_count = {
+    stage = 1
+    prod  = 2
+  }
+  test2_instances = {
+    "t3.micro" = data.aws_ami.ubuntu.id
+    "t3.large" = data.aws_ami.ubuntu.id
+  }
+}
+
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 data "aws_ami" "ubuntu" {
@@ -20,5 +45,15 @@ data "aws_ami" "ubuntu" {
 
 resource "aws_instance" "test" {
   ami           = data.aws_ami.ubuntu.id
-  instance_type = "t2.micro"
+  instance_type = local.test_instance_type[terraform.workspace]
+  count         = local.test_instance_count[terraform.workspace]
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_instance" "test2" {
+  for_each      = local.test2_instances
+  ami           = each.value
+  instance_type = each.key
 }

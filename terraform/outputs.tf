@@ -10,12 +10,12 @@ output "aws_region" {
   value = data.aws_region.current.id
 }
 
-output "private_ip" {
-  value      = aws_instance.test.private_ip
-  depends_on = [aws_instance.test]
-}
+// output "private_ip" {
+//   value      = aws_instance.test.private_ip
+//   depends_on = [aws_instance.test]
+// }
 
-output "subnet_id" {
-  value      = aws_instance.test.subnet_id
-  depends_on = [aws_instance.test]
-}
+// output "subnet_id" {
+//   value      = aws_instance.test.subnet_id
+//   depends_on = [aws_instance.test]
+// }
