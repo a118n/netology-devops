@@ -1,0 +1,12 @@
+repos:
+- id: github.com/a118n/terraform-cloud
+  apply_requirements: [approved, mergeable]
+  allowed_overrides: [apply_requirements, workflow]
+  allow_custom_workflows: true
+workflows:
+  default:
+    plan:
+      steps:
+      - init
+      - plan:
+        extra_args: ["-lock", "false"]
