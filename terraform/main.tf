@@ -23,8 +23,8 @@ locals {
     prod  = 2
   }
   test2_instances = {
-    "t3.micro" = data.aws_ami.ubuntu.id
-    "t3.large" = data.aws_ami.ubuntu.id
+    stage = ["0"]
+    prod  = ["0","1"]
   }
 }
 
@@ -53,7 +53,7 @@ resource "aws_instance" "test" {
 }
 
 resource "aws_instance" "test2" {
-  for_each      = local.test2_instances
-  ami           = each.value
-  instance_type = each.key
+  for_each      = local.test2_instances[terraform.workspace]
+  ami           = data.aws_ami.ubuntu.id
+  instance_type = local.test_instance_type[terraform.workspace]
 }
