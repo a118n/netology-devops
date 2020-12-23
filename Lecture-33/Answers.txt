@@ -1,0 +1,24 @@
+Найдите, где перечислены все доступные resource и data_source, приложите ссылку на эти строки в коде на гитхабе.
+
+Data Source:
+https://github.com/hashicorp/terraform-provider-aws/blob/bebe732d7185320b303d0d14d3c19551213c1ba2/aws/provider.go#L167
+
+Resource:
+https://github.com/hashicorp/terraform-provider-aws/blob/bebe732d7185320b303d0d14d3c19551213c1ba2/aws/provider.go#L398
+
+
+
+Для создания очереди сообщений SQS используется ресурс aws_sqs_queue у которого есть параметр name.
+С каким другим параметром конфликтует name? Приложите строчку кода, в которой это указано.
+
+С параметром name_prefix
+https://github.com/hashicorp/terraform-provider-aws/blob/bebe732d7185320b303d0d14d3c19551213c1ba2/aws/resource_aws_sqs_queue.go#L56
+
+Какая максимальная длина имени?
+80 символов.
+https://github.com/hashicorp/terraform-provider-aws/blob/bebe732d7185320b303d0d14d3c19551213c1ba2/aws/validators.go#L1037
+
+
+Какому регулярному выражению должно подчиняться имя?
+`^[0-9A-Za-z-_]+(\.fifo)?$`
+https://github.com/hashicorp/terraform-provider-aws/blob/bebe732d7185320b303d0d14d3c19551213c1ba2/aws/validators.go#L1041
