@@ -2,7 +2,7 @@
 
 1. Installs Java
 
-   You can specify Java version in `group_vars\all\vars.yml`.
+   You can specify Java version in `group_vars/all/vars.yml`.
 
    You have to manually [download](https://www.oracle.com/java/technologies/javase-jdk11-downloads.html) Java tar.gz archive and place it in the **files** directory. Be sure to check the `java_oracle_jdk_package` variable to match the archive filename.
 
