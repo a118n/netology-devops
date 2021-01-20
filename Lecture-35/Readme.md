@@ -18,7 +18,7 @@
 
    You can specify Kibana version in `group_vars/elasticsearch/vars.yml`.
 
-   Kibana installs is installed `/opt/kibana/$kibana_version/` directory.
+   Kibana is installed `/opt/kibana/$kibana_version/` directory.
 
 ## Notes:
 By default this playbook uses single docker container with the name **centos-elk**. You must have the container running prior to executing this playbook.
