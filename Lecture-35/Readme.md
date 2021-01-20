@@ -20,7 +20,7 @@
 
    Kibana installs into `/opt/kibana/$kibana_version/` directory.
 
-## Notes
+## Notes:
 By default this playbook uses single docker container with the name **centos-elk**. You must have the container running prior to executing this playbook.
 
 To run the container, use the following commands:
