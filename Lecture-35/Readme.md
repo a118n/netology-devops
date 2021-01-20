@@ -6,19 +6,19 @@
 
    You have to manually [download](https://www.oracle.com/java/technologies/javase-jdk11-downloads.html) Java tar.gz archive and place it in the **files** directory. Be sure to check the `java_oracle_jdk_package` variable to match the archive filename.
 
-   Java installs in the `/opt/jdk/$java_jdk_version/` directory.
+   Java is installed in the `/opt/jdk/$java_jdk_version/` directory.
 
 2. Installs Elasticsearch
 
    You can specify Elasticsearch version in `group_vars/elasticsearch/vars.yml`.
 
-   Elasticsearch installs into `/opt/elastic/$elastic_version/` directory.
+   Elasticsearch is installed into `/opt/elastic/$elastic_version/` directory.
 
 3. Installs Kibana
 
    You can specify Kibana version in `group_vars/elasticsearch/vars.yml`.
 
-   Kibana installs into `/opt/kibana/$kibana_version/` directory.
+   Kibana installs is installed `/opt/kibana/$kibana_version/` directory.
 
 ## Notes:
 By default this playbook uses single docker container with the name **centos-elk**. You must have the container running prior to executing this playbook.
