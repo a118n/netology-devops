@@ -1,0 +1,4 @@
+---
+  logstash_version: "7.10.2"
+  logstash_home: "/opt/logstash/{{ logstash_version }}"
+  elasticsearch_hostname: "{{ hostvars['centos-es'].ansible_hostname }}"

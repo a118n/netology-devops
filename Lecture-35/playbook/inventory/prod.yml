@@ -1,5 +1,10 @@
 ---
   elasticsearch:
     hosts:
-      centos-elk:
+      centos-es:
+        ansible_connection: docker
+
+  logstash:
+    hosts:
+      centos-ls:
         ansible_connection: docker

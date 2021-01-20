@@ -1,3 +1,5 @@
+# ELK stack installation playbook
+
 ## This playbook does the following:
 
 1. Installs Java
@@ -20,18 +22,31 @@
 
    Kibana is installed `/opt/kibana/$kibana_version/` directory.
 
-## Notes:
-By default this playbook uses single docker container with the name **centos-elk**. You must have the container running prior to executing this playbook.
+4. Installs Logstash
 
-To run the container, use the following commands:
+   **Logstash is installed on a separate host**.
+
+   You can specify Logstash version in `group_vars/logstash/vars.yml`.
+
+   Logstash is installed `/opt/logstash/$logstash_version/` directory.
+
+## Notes:
+By default this playbook uses single docker container with the name **centos-es** for Elasticsearch & Kibana, and another separate container with the name **centos-ls** for Logstash. You must have the containers running prior to executing this playbook.
+
+To run the containers, use the following commands:
 ```
-docker run -dit --name centos-elk centos:7
-docker exec -it centos-elk bash -c 'yum install -y sudo'
+docker run -dit --name centos-es centos:7
+docker exec -it centos-es bash -c 'yum install -y sudo'
+docker run -dit --name centos-ls centos:7
+docker exec -it centos-ls bash -c 'yum install -y sudo'
 ```
+Or just use `docker_up.sh` script.
+
 Of course, you can change it to anything else in the `inventory/prod.yml` file.
 
 ## Available tags:
 * java
 * elastic
 * kibana
+* logstash
 * skip_ansible_lint
