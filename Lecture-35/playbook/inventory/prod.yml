@@ -1,0 +1,5 @@
+---
+  elasticsearch:
+    hosts:
+      centos-elk:
+        ansible_connection: docker
