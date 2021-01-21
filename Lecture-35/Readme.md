@@ -44,6 +44,10 @@ Or just use `docker_up.sh` script.
 
 Of course, you can change it to anything else in the `inventory/prod.yml` file.
 
+## Requirements:
+* Ansible >= 2.10
+* Docker >= 20.10
+
 ## Available tags:
 * java
 * elastic
