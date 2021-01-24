@@ -1,0 +1,5 @@
+- hosts: elk
+  roles:
+    - java
+    - elastic-role
+    - kibana-role
