@@ -4,8 +4,6 @@ import psutil
 import json
 import time
 import datetime
-from sys import argv
-from os import path
 
 date = datetime.datetime.now()
 log_path = f"/var/log/{date.year}-{date.month}-{date.day}-awesome-monitoring.log"
