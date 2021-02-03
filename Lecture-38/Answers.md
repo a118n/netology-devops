@@ -27,3 +27,7 @@ SLO/SLA/SLI по http-запросам
 70%, но при этом в вашей системе нет кодов ответа 5xx и 4xx. Где у вас ошибка?
 
 Необходимо добавить коды редиректов 3xx: `(summ_2xx_requests + summ_3xx_requests) / summ_all_requests`
+
+## Дополнительное задание
+
+get_metrics.py
